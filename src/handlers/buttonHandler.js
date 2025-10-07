@@ -83,12 +83,41 @@ export async function handlePlayerButton(interaction) {
 
             case 'player_queue':
                 // Show queue in ephemeral message
-                const queueEmbed = createQueueEmbed(queue);
+                const queueEmbed = createQueueEmbed(queue, 0);
                 await interaction.editReply(queueEmbed);
                 break;
 
             default:
-                await interaction.editReply('❌ Unknown button action');
+                // Handle queue pagination and removal buttons
+                if (interaction.customId.startsWith('queue_page_')) {
+                    const page = parseInt(interaction.customId.split('_')[2]);
+                    const queueEmbed = createQueueEmbed(queue, page);
+                    await interaction.update(queueEmbed);
+                } else if (interaction.customId.startsWith('queue_remove_')) {
+                    const position = parseInt(interaction.customId.split('_')[2]);
+                    const track = queue.tracks.data[position];
+
+                    if (!track) {
+                        await interaction.update({ content: '❌ Track not found in queue', components: [] });
+                        return;
+                    }
+
+                    queue.node.remove(position);
+                    await interaction.update({
+                        content: `✅ Removed: **${track.title}**`,
+                        embeds: [],
+                        components: []
+                    });
+                } else if (interaction.customId === 'queue_clear_all') {
+                    queue.tracks.clear();
+                    await interaction.update({
+                        content: '🗑️ Queue cleared!',
+                        embeds: [],
+                        components: []
+                    });
+                } else {
+                    await interaction.editReply('❌ Unknown button action');
+                }
         }
     } catch (error) {
         console.error('[ButtonHandler] Error handling button:', error);

@@ -82,13 +82,17 @@ function getLoopLabel(repeatMode) {
 }
 
 /**
- * Creates a simple queue embed
+ * Creates a queue embed with remove buttons and pagination
  * @param {Queue} queue - The player queue
- * @returns {Object} { embed }
+ * @param {number} page - Current page (0-indexed)
+ * @returns {Object} { embeds, components }
  */
-export function createQueueEmbed(queue) {
+export function createQueueEmbed(queue, page = 0) {
     const currentTrack = queue.currentTrack;
     const tracks = queue.tracks.data;
+    const ITEMS_PER_PAGE = 5;
+    const totalPages = Math.max(1, Math.ceil(tracks.length / ITEMS_PER_PAGE));
+    const currentPage = Math.min(page, totalPages - 1);
 
     const embed = new EmbedBuilder()
         .setColor('#5865F2')
@@ -104,10 +108,15 @@ export function createQueueEmbed(queue) {
         });
     }
 
-    // Upcoming tracks (limit to 10)
+    // Upcoming tracks with pagination
     if (tracks.length > 0) {
-        const upcoming = tracks.slice(0, 10).map((track, index) => {
-            return `**${index + 1}.** ${track.title}\n${track.author} • ${track.duration}`;
+        const startIdx = currentPage * ITEMS_PER_PAGE;
+        const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, tracks.length);
+        const pageTrack = tracks.slice(startIdx, endIdx);
+
+        const upcoming = pageTrack.map((track, index) => {
+            const position = startIdx + index + 1;
+            return `**${position}.** ${track.title}\n${track.author} • ${track.duration}`;
         }).join('\n\n');
 
         embed.addFields({
@@ -116,8 +125,8 @@ export function createQueueEmbed(queue) {
             inline: false
         });
 
-        if (tracks.length > 10) {
-            embed.setFooter({ text: `And ${tracks.length - 10} more...` });
+        if (totalPages > 1) {
+            embed.setFooter({ text: `Page ${currentPage + 1}/${totalPages}` });
         }
     } else {
         embed.addFields({
@@ -127,5 +136,63 @@ export function createQueueEmbed(queue) {
         });
     }
 
-    return { embeds: [embed] };
+    // Create components (buttons)
+    const components = [];
+
+    // Remove buttons for current page items (max 5 per row, 5 items = 1 row)
+    if (tracks.length > 0) {
+        const startIdx = currentPage * ITEMS_PER_PAGE;
+        const endIdx = Math.min(startIdx + ITEMS_PER_PAGE, tracks.length);
+        const removeButtons = [];
+
+        for (let i = startIdx; i < endIdx; i++) {
+            removeButtons.push(
+                new ButtonBuilder()
+                    .setCustomId(`queue_remove_${i}`)
+                    .setLabel(`${i + 1}`)
+                    .setEmoji('❌')
+                    .setStyle(ButtonStyle.Danger)
+            );
+        }
+
+        // Split into rows if needed (max 5 buttons per row)
+        const row1 = new ActionRowBuilder().addComponents(removeButtons.slice(0, 5));
+        components.push(row1);
+    }
+
+    // Navigation and utility buttons
+    const navRow = new ActionRowBuilder();
+
+    if (totalPages > 1) {
+        navRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId(`queue_page_${currentPage - 1}`)
+                .setLabel('Previous')
+                .setEmoji('◀️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === 0),
+            new ButtonBuilder()
+                .setCustomId(`queue_page_${currentPage + 1}`)
+                .setLabel('Next')
+                .setEmoji('▶️')
+                .setStyle(ButtonStyle.Secondary)
+                .setDisabled(currentPage === totalPages - 1)
+        );
+    }
+
+    if (tracks.length > 0) {
+        navRow.addComponents(
+            new ButtonBuilder()
+                .setCustomId('queue_clear_all')
+                .setLabel('Clear Queue')
+                .setEmoji('🗑️')
+                .setStyle(ButtonStyle.Danger)
+        );
+    }
+
+    if (navRow.components.length > 0) {
+        components.push(navRow);
+    }
+
+    return { embeds: [embed], components };
 }
