@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, Collection } from 'discord.js';
 import { Player } from 'discord-player';
 import { DefaultExtractors } from '@discord-player/extractor';
 import { YtDlpExtractor } from './extractors/YtDlpExtractor.js';
+import { createPlayerEmbed } from './utils/createPlayerEmbed.js';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 import { readdirSync } from 'fs';
@@ -25,6 +26,10 @@ const client = new Client({
 
 // Initialize command collection
 client.commands = new Collection();
+
+// Track "Now Playing" messages per guild
+// Structure: Map<guildId, { messageId, channelId }>
+const nowPlayingMessages = new Map();
 
 // Initialize discord-player
 const player = new Player(client, {
@@ -62,14 +67,55 @@ player.events.on('error', (queue, error) => {
 });
 
 // Player event handlers
-player.events.on('playerStart', (queue, track) => {
+player.events.on('playerStart', async (queue, track) => {
     console.log(`▶️ Now playing: ${track.title}`);
-    queue.metadata.channel.send(`▶️ Now playing: **${track.title}**`);
+
+    const guildId = queue.guild.id;
+    const channel = queue.metadata.channel;
+    const messageData = createPlayerEmbed(track, queue);
+
+    try {
+        // Check if we have a persistent message for this guild
+        const stored = nowPlayingMessages.get(guildId);
+
+        if (stored && stored.channelId === channel.id) {
+            // Try to edit existing message
+            try {
+                const message = await channel.messages.fetch(stored.messageId);
+                await message.edit(messageData);
+                console.log(`[Player] Updated persistent "Now Playing" message`);
+            } catch (error) {
+                // Message was deleted or not found, create new one
+                console.log(`[Player] Persistent message not found, creating new one`);
+                const newMessage = await channel.send(messageData);
+                nowPlayingMessages.set(guildId, {
+                    messageId: newMessage.id,
+                    channelId: channel.id
+                });
+            }
+        } else {
+            // Create new persistent message
+            const newMessage = await channel.send(messageData);
+            nowPlayingMessages.set(guildId, {
+                messageId: newMessage.id,
+                channelId: channel.id
+            });
+            console.log(`[Player] Created new persistent "Now Playing" message`);
+        }
+    } catch (error) {
+        console.error(`[Player] Error handling now playing message:`, error);
+        // Fallback to simple message
+        await channel.send(`▶️ Now playing: **${track.title}**`).catch(console.error);
+    }
 });
 
 player.events.on('audioTrackAdd', (queue, track) => {
     console.log(`➕ Added to queue: ${track.title}`);
-    queue.metadata.channel.send(`➕ Added to queue: **${track.title}**`);
+    // Only send message if queue is not currently playing (first song)
+    // Otherwise it's redundant with the "Now Playing" message update
+    if (!queue.node.isPlaying()) {
+        queue.metadata.channel.send(`➕ Added to queue: **${track.title}**`);
+    }
 });
 
 player.events.on('disconnect', (queue) => {

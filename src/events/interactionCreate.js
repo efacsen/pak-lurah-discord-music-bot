@@ -1,6 +1,16 @@
+import { handlePlayerButton } from '../handlers/buttonHandler.js';
+
 export default {
     name: 'interactionCreate',
     async execute(interaction) {
+        // Handle button interactions
+        if (interaction.isButton()) {
+            if (interaction.customId.startsWith('player_')) {
+                await handlePlayerButton(interaction);
+                return;
+            }
+        }
+
         // Only handle slash commands
         if (!interaction.isChatInputCommand()) return;
 

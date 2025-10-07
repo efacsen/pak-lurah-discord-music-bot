@@ -46,21 +46,35 @@ export class YtDlpExtractor extends BaseExtractor {
         try {
             console.log(`[YtDlp] Handling query: ${query}`);
 
-            // For search queries, use ytsearch: prefix
-            const searchQuery = query.startsWith('http') ? query : `ytsearch1:${query}`;
+            // For direct URLs, return single result. For searches, return top 3
+            const isDirectUrl = query.startsWith('http');
+            const searchQuery = isDirectUrl ? query : `ytsearch3:${query}`;
 
-            // Get video info
-            const info = await this.ytDlp.getVideoInfo([searchQuery, '--no-playlist']);
+            // Use execPromise to get raw JSON output for better control
+            const jsonOutput = await this.ytDlp.execPromise([
+                searchQuery,
+                '--dump-json',
+                '--no-playlist',
+                '--flat-playlist'
+            ]);
 
-            // Handle playlist results from search
-            const entries = info.entries || [info];
-            const tracks = entries.slice(0, 1).map(video => {
+            // Parse each line as JSON (yt-dlp outputs one JSON object per line for searches)
+            const lines = jsonOutput.trim().split('\n').filter(line => line.trim());
+            const results = lines.map(line => JSON.parse(line));
+
+            console.log(`[YtDlp] Raw results count: ${results.length}`);
+
+            // Limit to requested number
+            const maxResults = isDirectUrl ? 1 : 3;
+            const limitedResults = results.slice(0, maxResults);
+
+            const tracks = limitedResults.map(video => {
                 return new Track(this.context.player, {
                     title: video.title,
-                    author: video.uploader || video.channel || 'Unknown',
-                    url: video.webpage_url || video.url,
-                    thumbnail: video.thumbnail,
-                    duration: this.parseDuration(video.duration * 1000),
+                    author: video.uploader || video.channel || video.uploader_id || 'Unknown',
+                    url: video.webpage_url || video.url || `https://www.youtube.com/watch?v=${video.id}`,
+                    thumbnail: video.thumbnail || video.thumbnails?.[0]?.url,
+                    duration: this.parseDuration((video.duration || 0) * 1000),
                     views: video.view_count || 0,
                     requestedBy: context.requestedBy,
                     source: 'youtube',

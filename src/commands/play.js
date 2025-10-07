@@ -1,5 +1,6 @@
 import { SlashCommandBuilder } from 'discord.js';
 import { useMainPlayer } from 'discord-player';
+import { createSongSelectionEmbed } from '../utils/createSongSelectionEmbed.js';
 
 export default {
     data: new SlashCommandBuilder()
@@ -89,7 +90,13 @@ export default {
                 await interaction.editReply(
                     `✅ Added **${searchResult.tracks.length}** tracks from playlist: **${searchResult.playlist.title}**`
                 );
-            } else {
+
+                // Start playing if not already playing
+                if (!queue.node.isPlaying()) {
+                    await queue.node.play();
+                }
+            } else if (searchResult.tracks.length === 1) {
+                // Direct URL or single result - add immediately
                 const track = searchResult.tracks[0];
                 queue.addTrack(track);
 
@@ -98,11 +105,70 @@ export default {
                 } else {
                     await interaction.editReply(`✅ Added to queue: **${track.title}**`);
                 }
-            }
 
-            // Start playing if not already playing
-            if (!queue.node.isPlaying()) {
-                await queue.node.play();
+                // Start playing if not already playing
+                if (!queue.node.isPlaying()) {
+                    await queue.node.play();
+                }
+            } else {
+                // Multiple results - show selection UI
+                const selectionMessage = createSongSelectionEmbed(searchResult.tracks, query);
+                await interaction.editReply(selectionMessage);
+
+                // Create interaction collector to wait for button click
+                const filter = (i) => {
+                    return i.user.id === interaction.user.id && i.customId.startsWith('song_select_');
+                };
+
+                const collector = interaction.channel.createMessageComponentCollector({
+                    filter,
+                    time: 30000, // 30 seconds timeout
+                    max: 1
+                });
+
+                collector.on('collect', async (i) => {
+                    if (i.customId === 'song_select_cancel') {
+                        await i.update({ content: '❌ Song selection cancelled.', embeds: [], components: [] });
+                        return;
+                    }
+
+                    // Extract selected index from customId (e.g., "song_select_0" -> 0)
+                    const selectedIndex = parseInt(i.customId.split('_')[2]);
+                    const selectedTrack = searchResult.tracks[selectedIndex];
+
+                    if (!selectedTrack) {
+                        await i.update({ content: '❌ Invalid selection.', embeds: [], components: [] });
+                        return;
+                    }
+
+                    // Add selected track to queue
+                    queue.addTrack(selectedTrack);
+
+                    if (!queue.node.isPlaying()) {
+                        await i.update({
+                            content: `🎶 Now playing: **${selectedTrack.title}**`,
+                            embeds: [],
+                            components: []
+                        });
+                        await queue.node.play();
+                    } else {
+                        await i.update({
+                            content: `✅ Added to queue: **${selectedTrack.title}**`,
+                            embeds: [],
+                            components: []
+                        });
+                    }
+                });
+
+                collector.on('end', (_collected, reason) => {
+                    if (reason === 'time') {
+                        interaction.editReply({
+                            content: '⏱️ Song selection timed out.',
+                            embeds: [],
+                            components: []
+                        }).catch(console.error);
+                    }
+                });
             }
         } catch (error) {
             console.error('Error in play command:', error);
