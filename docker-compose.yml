@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  bot:
+    build: .
+    container_name: discord-music-bot
+    restart: unless-stopped
+    env_file:
+      - .env
+    volumes:
+      - ./src:/app/src
+      - discord-player-cache:/app/.discord-player
+volumes:
+  discord-player-cache:

@@ -1,0 +1,20 @@
+.env
+node_modules/
+*.log
+.DS_Store
+.discord-player/
+
+# YouTube cookies (contains sensitive auth data)
+youtube_cookies.txt
+*_cookies.txt
+
+# Internal development notes (not for public repo)
+.dev-notes/
+
+# Temp/cache files
+*-player-script.js
+
+# Binaries (should be installed via package managers)
+yt-dlp
+ffmpeg
+ffprobe

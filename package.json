@@ -1,0 +1,46 @@
+{
+  "name": "pak-lurah-discord-music-bot",
+  "version": "2.0.0",
+  "description": "Modern Discord music bot with YouTube support - Built with ❤️ in free time",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "check": "node check-system.js",
+    "clear-commands": "node clear-commands.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/efacsen/pak-lurah-discord-music-bot.git"
+  },
+  "homepage": "https://github.com/efacsen/pak-lurah-discord-music-bot#readme",
+  "bugs": {
+    "url": "https://github.com/efacsen/pak-lurah-discord-music-bot/issues"
+  },
+  "keywords": [
+    "discord",
+    "discord-bot",
+    "music",
+    "music-bot",
+    "youtube",
+    "yt-dlp",
+    "discord-player",
+    "discord.js"
+  ],
+  "author": "efacsen",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@discord-player/extractor": "^7.1.0",
+    "discord-player": "^7.1.0",
+    "discord-player-youtube": "^0.5.6",
+    "discord.js": "^14.16.3",
+    "dotenv": "^16.4.5",
+    "mediaplex": "^1.0.0",
+    "play-dl": "^1.9.7",
+    "yt-dlp-wrap": "^2.3.12"
+  }
+}
