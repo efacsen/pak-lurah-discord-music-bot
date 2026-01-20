@@ -46,26 +46,33 @@ export class YtDlpExtractor extends BaseExtractor {
         try {
             console.log(`[YtDlp] Handling query: ${query}`);
 
-            // For direct URLs, return single result. For searches, return top 3
+            // For direct URLs, check if it's a playlist
             const isDirectUrl = query.startsWith('http');
+            const isPlaylist = isDirectUrl && (query.includes('list=') || query.includes('/playlist'));
             const searchQuery = isDirectUrl ? query : `ytsearch3:${query}`;
 
             // Use execPromise to get raw JSON output for better control
-            const jsonOutput = await this.ytDlp.execPromise([
+            const ytdlpArgs = [
                 searchQuery,
                 '--dump-json',
-                '--no-playlist',
                 '--flat-playlist'
-            ]);
+            ];
 
-            // Parse each line as JSON (yt-dlp outputs one JSON object per line for searches)
+            // Only add --no-playlist for non-playlist URLs
+            if (!isPlaylist) {
+                ytdlpArgs.push('--no-playlist');
+            }
+
+            const jsonOutput = await this.ytDlp.execPromise(ytdlpArgs);
+
+            // Parse each line as JSON (yt-dlp outputs one JSON object per line)
             const lines = jsonOutput.trim().split('\n').filter(line => line.trim());
             const results = lines.map(line => JSON.parse(line));
 
-            console.log(`[YtDlp] Raw results count: ${results.length}`);
+            console.log(`[YtDlp] Raw results count: ${results.length}, isPlaylist: ${isPlaylist}`);
 
-            // Limit to requested number
-            const maxResults = isDirectUrl ? 1 : 3;
+            // For searches, limit to 3. For playlists, return all. For single videos, return 1
+            const maxResults = isPlaylist ? results.length : (isDirectUrl ? 1 : 3);
             const limitedResults = results.slice(0, maxResults);
 
             const tracks = limitedResults.map(video => {
@@ -84,6 +91,18 @@ export class YtDlpExtractor extends BaseExtractor {
             });
 
             console.log(`[YtDlp] Found ${tracks.length} track(s)`);
+
+            // Return as playlist if it's a playlist URL
+            if (isPlaylist && tracks.length > 0) {
+                return {
+                    playlist: {
+                        title: results[0]?.playlist_title || 'YouTube Playlist',
+                        url: query
+                    },
+                    tracks
+                };
+            }
+
             return { tracks };
         } catch (error) {
             console.error('[YtDlp] Error handling query:', error);
@@ -102,12 +121,14 @@ export class YtDlpExtractor extends BaseExtractor {
                 throw new Error('No URL found in track object');
             }
 
-            // Use yt-dlp to get the best audio stream URL
+            // Use yt-dlp with fallback format selector to handle SABR streaming
+            // Format: bestaudio > best audio from any format > best available
             const streamUrl = await this.ytDlp.execPromise([
                 url,
-                '-f', 'bestaudio',
+                '-f', 'bestaudio/ba/b',
                 '-g', // Get direct URL
-                '--no-playlist'
+                '--no-playlist',
+                '--extractor-args', 'youtube:player_client=android,web'
             ]);
 
             const directUrl = streamUrl.trim().split('\n')[0];
